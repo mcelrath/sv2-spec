@@ -11,6 +11,7 @@ The full search space is defined in part by valid values in the following block 
 
 The other portion of the block header that is used to define the full search space is the Merkle Root, which is deterministically computed from:
 - Coinbase transaction: typically 4-8 bytes, possibly much more.
+> BOB: Coinbase tx is much larger than that, do you mean just that extranonce is 4-8 bytes?
 - Transaction set: practically unbounded space.
 
 All roles in Stratum v2 MUST NOT use transaction selection/ordering for additional hash space extension.
@@ -33,10 +34,12 @@ Standard Jobs are restricted to fixed Merkle Roots. We call this header-only min
 
 The size of the search space for one Standard Job, given a fixed `nTime` field, is `2^(NONCE_BITS + BIP320_VERSION_ROLLING_BITS) = ~280Th`, where `NONCE_BITS = 32` and `BIP320_VERSION_ROLLING_BITS = 16`.
 This is a guaranteed space before `nTime` rolling.
+> BOB: I continue to be concerned that 280TH is really close to the per-second performance of devices available today, and next generation devices will have to do more than just header mining by default. A clear specification of how to divide the search space, including extranonce, is needed. Not sure if you already have that. This also means that next generation devices will have to use Extended Jobs at the device level.
 
 Standard Jobs are distributed via the [`NewMiningJob`](#5415-newminingjob-server---client) message, which can ONLY be sent via [Standard Channels](#531-standard-channels).
 
 All SV2 mining devices are restricted to Standard Jobs. This is a big difference from legacy SV1 mining devices, where rolling extranonces is a common feature.
+> Same comment as above...next generation devices will have to use Extended Jobs by default. Also "devices" which aggregate hash boards at a size larger than a shoebox will need Extended Jobs, and those have existed for years.
 
 ![](./img/standard_job.png)
 
@@ -84,18 +87,22 @@ And a [Standard Channel](#531-standard-channels) has the following property:
 So when a proxy receives an Extended Job, it could either:
 - propagate it as an Extended Job to a downstream Extended or Group Channel, where the Extended Extranonce will be further split.
 - convert it into multiple Standard Jobs, where each downstream Standard Channel's `extranonce_prefix` is used to calculate the Merkle Root.
+> BOB: It's not clear to me that Extended Job sub-division can be composed. Imagine you have two layers of proxies. The top layer sends an Extended Job to a downstream proxy which further subdvides that Extended Job. Are the above "reserved" fields sufficient to allow multiple levels of sub-division of the nonce space?
 
 ### 5.1.3 Future Jobs
 
 A Job with an empty template or speculated non-empty template can be sent in advance to speedup Job distribution when a new block is found on the network.
+> BOB: YAAAAAAYYYYY!!!!
 
 The mining server MAY have precomputed such a Job and is able to pre-distribute it for all active Channels.
 The only missing information to start to mine on the new block is the new `prev_hash`.
 This information can be provided independently.
+> BOB: And timestamp, and Braidpool metadata -- more fine-grained mallation of the Merkle Tree and coinbase will be needed for Braidpool.
 
 Such an approach improves the efficiency of the protocol where the upstream node does not waste precious time immediately after a new block is found in the network.
 
 The trade-off here is that a non-empty Future Job could potentially contain a transaction that was already included in the block that was just propagated on the network, which would lead to an invalid block if successfully mined.
+> BOB: If the block was mined by *US* (same pool) we can assume the PrevHash is the block we just mined, which can be broadcast (multicast) over the LAN.
 
 So mining servers that provide non-empty Future Jobs SHOULD:
 - never send a `SetNewPrevHash` for a Future Job that was later found to contain a conflicting transaction.
